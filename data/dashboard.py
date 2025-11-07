@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
 from statsmodels.tsa.holtwinters import SimpleExpSmoothing
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from pmdarima import auto_arima
 from prophet import Prophet
 from prophet.plot import plot_plotly
@@ -115,9 +116,35 @@ def model_moving_average(ts_data, n_steps):
     forecast = np.repeat(forecast_value, n_steps)
     return pd.Series(forecast, index=pd.date_range(start=ts_data.index[-1] + pd.DateOffset(months=1), periods=n_steps, freq='MS'))
 
-def model_exp_smoothing(ts_data, n_steps):
-    """Suavizamiento Exponencial Simple (Holt)."""
-    model = SimpleExpSmoothing(ts_data, initialization_method="estimated").fit()
+def model_holt_winters(ts_data, n_steps):
+    """
+    Suavizamiento Exponencial Triple (Holt-Winters)
+    Captura Tendencia y Estacionalidad.
+    """
+    # Asumimos una tendencia aditiva y estacionalidad aditiva.
+    # Es más robusto para datos con posibles ceros que 'mul' (multiplicativo).
+    try:
+        model = ExponentialSmoothing(
+            ts_data, 
+            trend='add', 
+            seasonal='add', 
+            seasonal_periods=12 # 12 meses
+        ).fit()
+    except Exception as e:
+        # Fallback por si los datos son muy cortos o no tienen estacionalidad
+        st.warning(f"Holt-Winters (add/add) falló ({e}). Intentando sin tendencia.")
+        try:
+            model = ExponentialSmoothing(
+                ts_data, 
+                trend=None, 
+                seasonal='add', 
+                seasonal_periods=12
+            ).fit()
+        except Exception:
+            # Fallback final al modelo simple si todo falla
+            st.warning("Holt-Winters (seasonal) falló. Usando Suavizamiento Simple.")
+            model = SimpleExpSmoothing(ts_data, initialization_method="estimated").fit()
+
     forecast = model.forecast(n_steps)
     return forecast
 
@@ -255,7 +282,7 @@ def run_model_pipeline(_df_completo, _productos_sel, _clientes_sel, _metrica_sel
     model_pipeline = [
         ('Regresión Lineal', model_linear_regression),
         ('Promedio Móvil (6m)', model_moving_average),
-        ('Suavizamiento Exponencial', model_exp_smoothing),
+        ('Holt-Winters', model_holt_winters),
         ('ARIMA', model_arima),
         ('Prophet', model_prophet),
         ('Método Croston', model_croston)
@@ -289,7 +316,7 @@ def get_gemini_analysis(metrics_summary, n_meses, metrica_nombre):
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         
         prompt = f"""
         Eres un analista de datos senior especializado en pronósticos de ventas.
@@ -427,6 +454,7 @@ if df is not None:
 else:
 
     st.info("Cargando datos... Si el error persiste, revisa el nombre del archivo.")
+
 
 
 
