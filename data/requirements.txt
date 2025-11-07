@@ -1,9 +1,9 @@
 streamlit
 pandas
 plotly
-statsmodels
+numpy==1.24.4
+statsmodels==0.14.0
 scikit-learn
 pmdarima
 prophet
 google-generativeai
-numpy
