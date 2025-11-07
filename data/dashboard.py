@@ -355,33 +355,48 @@ if df is not None:
     
     api_key = st.sidebar.text_input("🔑 API Key de Google Gemini", type="password", help="Necesaria para el análisis de IA")
     
-    # --- Filtros de Producto y Cliente (LÓGICA CORREGIDA) ---
+    # --- Lógica de Filtros con Memoria (st.session_state) ---
     
-    # 1. Filtros de Producto
+    # 1. Inicializar la "memoria" para los checkboxes
+    #    (Esto solo se ejecuta una vez en la primera carga)
+    if 'todos_productos' not in st.session_state:
+        st.session_state.todos_productos = True
+    if 'todos_clientes' not in st.session_state:
+        st.session_state.todos_clientes = True
+    
+    # --- 2. Filtros de Producto ---
     productos_lista = df[COLUMNA_PRODUCTO].unique().tolist()
-    # Usamos value=True para que el estado inicial sea "Todos"
-    todos_productos = st.sidebar.checkbox("Seleccionar Todos los Productos", value=True)
+    
+    # Usamos 'key' para leer y escribir en la "memoria" de Streamlit
+    # Ya no usamos 'value=True', que era el error
+    todos_productos = st.sidebar.checkbox(
+        "Seleccionar Todos los Productos", 
+        key='todos_productos'
+    )
     
     if todos_productos:
-        # Si "Todos" está marcado, mostramos el multiselect bloqueado y con todo seleccionado
         productos_seleccionados = st.sidebar.multiselect(
             "Selecciona Productos:", 
             options=productos_lista,
-            default=productos_lista,  # Selecciona todos por defecto
-            disabled=True             # Bloquea el widget
+            default=productos_lista,  # Llenar la lista
+            disabled=True             # Bloquearla
         )
     else:
-        # Si "Todos" NO está marcado, el usuario puede elegir
+        # Si "Todos" está desmarcado, el usuario puede elegir
         productos_seleccionados = st.sidebar.multiselect(
             "Selecciona Productos:", 
             options=productos_lista,
-            default=None,             # Sin selección por defecto
-            disabled=False            # Habilita el widget
+            default=None,             # Empezar vacío (o con la selección anterior)
+            disabled=False            # Habilitar
         )
 
-    # 2. Filtros de Cliente
+    # --- 3. Filtros de Cliente ---
     clientes_lista = df[COLUMNA_CLIENTE].unique().tolist()
-    todos_clientes = st.sidebar.checkbox("Seleccionar Todos los Clientes", value=True)
+    
+    todos_clientes = st.sidebar.checkbox(
+        "Seleccionar Todos los Clientes", 
+        key='todos_clientes'
+    )
     
     if todos_clientes:
         clientes_seleccionados = st.sidebar.multiselect(
@@ -484,6 +499,7 @@ if df is not None:
 else:
 
     st.info("Cargando datos... Si el error persiste, revisa el nombre del archivo.")
+
 
 
 
