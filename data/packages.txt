@@ -1,1 +1,3 @@
 build-essential
+build-essential
+gfortran
