@@ -442,7 +442,6 @@ if df is not None:
                 # --- 2. Ejecución del Pipeline Cacheado ---
                 # Pasamos el DataFrame original (df) y los filtros (tuplas)
                 df_metrics, df_forecast, ts_full = run_model_pipeline(
-                    df, 
                     productos_tuple,
                     clientes_tuple,
                     metrica_seleccionada,
@@ -505,6 +504,7 @@ if df is not None:
 else:
 
     st.info("Cargando datos... Si el error persiste, revisa el nombre del archivo.")
+
 
 
 
