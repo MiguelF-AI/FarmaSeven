@@ -259,7 +259,7 @@ def get_gemini_analysis(metrics_summary, n_meses, metrica_nombre):
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
         Eres un analista de datos senior especializado en pronósticos de ventas.
@@ -398,6 +398,7 @@ if df is not None:
 else:
 
     st.info("Cargando datos... Si el error persiste, revisa el nombre del archivo.")
+
 
 
 
