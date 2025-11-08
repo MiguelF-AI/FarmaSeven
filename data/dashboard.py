@@ -257,12 +257,19 @@ if df is not None:
                 if ts_full is not None:
                     
                     # --- 2. División Train/Test (se hace siempre) ---
-                    test_size = n_meses_prediccion
-                    if len(ts_full) <= (test_size + 12): # Necesitamos al menos 1 año + test
-                        st.error(f"Error: No hay suficientes datos. Se necesitan más de {test_size + 12} meses para la validación.")
+                    # A. División FIJA 80/20 para métricas y gráfico de evaluación
+                    split_point = int(len(ts_full) * 0.8)
+                    ts_train = ts_full.iloc[:split_point]
+                    ts_test = ts_full.iloc[split_point:]
+
+                    # B. El slider (n_meses_prediccion) es solo para el pronóstico FUTURO.
+                    #    (Ya lo tenemos en la variable n_meses_prediccion)
+                    
+                    # C. Validación (asegurarnos de que el 20% no sea muy pequeño)
+                    if len(ts_test) < 2 or len(ts_train) < 12:
+                        st.error(f"Error: No hay suficientes datos para una división 80/20 válida (Train: {len(ts_train)}, Test: {len(ts_test)}).")
+                        st.stop() # Detener la ejecución si no hay datos
                     else:
-                        ts_train = ts_full.iloc[:-test_size]
-                        ts_test = ts_full.iloc[-test_size:]
                         
                         # --- 3. Ejecución de Modelos (se hace siempre) ---
                         st.write("Entrenando modelos...")
@@ -372,14 +379,14 @@ if df is not None:
                         # 1. Datos de Entrenamiento
                         fig_eval.add_trace(go.Scatter(
                             x=ts_train.index, y=ts_train.values,
-                            mode='lines', name='1. Datos de Entrenamiento (Train)',
+                            mode='lines', name='1. Datos de Entrenamiento (80%)', # <-- CAMBIO DE TEXTO
                             line=dict(color='blue')
                         ))
 
                         # 2. Datos Reales de Prueba
                         fig_eval.add_trace(go.Scatter(
                             x=ts_test.index, y=ts_test.values,
-                            mode='lines+markers', name='2. Datos Reales (Test)',
+                            mode='lines+markers', name='2. Datos Reales (Test - 20%)', # <-- CAMBIO DE TEXTO
                             line=dict(color='black', width=3)
                         ))
 
@@ -391,13 +398,13 @@ if df is not None:
                         ))
                         
                         fig_eval.update_layout(
-                            title=f"Comparación: Real vs. Predicción en el set de Prueba (20%)",
+                            title=f"Comparación: Real vs. Predicción en el set de Prueba (20%)", # <-- CAMBIO DE TEXTO
                             xaxis_title="Fecha",
                             yaxis_title=metrica_seleccionada,
                             legend_title="Series"
                         )
                         st.plotly_chart(fig_eval, use_container_width=True)
-                        st.caption(f"Este gráfico muestra qué tan bien el modelo '{best_model_name_eval}' (línea roja) logró predecir los datos reales (línea negra) usando solo los datos de entrenamiento (línea azul).")
+                        st.caption(f"Este gráfico muestra qué tan bien el modelo '{best_model_name_eval}'... en el set de Prueba (20%).") # <-- CAMBIO DE TEXTO
                         
                         # --- 7. Tablas de Resultados ---
                         st.header("Detalle de Resultados")
@@ -413,6 +420,7 @@ if df is not None:
                             st.caption("Valores más bajos son mejores.")
 else:
     st.info("Cargando datos... Si el error persiste, revisa el nombre/ruta del archivo.")
+
 
 
 
