@@ -2,79 +2,29 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
-from statsmodels.tsa.holtwinters import SimpleExpSmoothing
-from statsmodels.tsa.holtwinters import ExponentialSmoothing
+from statsmodels.tsa.holtwinters import SimpleExpSmoothing, ExponentialSmoothing
 from pmdarima import auto_arima
 from prophet import Prophet
-from prophet.plot import plot_plotly
 import google.generativeai as genai
 import time
 import warnings
 
 # --- Configuración de la Página y Advertencias ---
 st.set_page_config(layout="wide", page_title="Dashboard de Predicción de Ventas")
-warnings.filterwarnings('ignore') # Ocultar advertencias de modelos
+warnings.filterwarnings('ignore')
 
 # --- Constantes y Nombres ---
-NOMBRE_ARCHIVO_DATOS = 'data/datos_finales_listos_para_modelo.csv'
+# ¡ASEGÚRATE DE QUE ESTA RUTA SEA CORRECTA EN GITHUB!
+NOMBRE_ARCHIVO_DATOS = 'data/datos_finales_listos_para_modelo.csv' 
 COLUMNA_PRODUCTO = 'Producto - Descripción'
 COLUMNA_CLIENTE = 'Cliente - Descripción'
 COLUMNA_FECHA = 'Fecha'
 METRICAS_PREDICCION = ['Pedido_piezas', 'Pedido_MXN', 'Factura_piezas', 'Factura_MXN']
 
-# --- Funciones de Callback para Filtros (¡NUEVO!) ---
-
-def setup_session_state(df):
-    """Inicializa la memoria de Streamlit la primera vez."""
-    if 'initialized' in st.session_state:
-        return
-    
-    st.session_state.initialized = True
-    st.session_state.productos_lista = df[COLUMNA_PRODUCTO].unique().tolist()
-    st.session_state.clientes_lista = df[COLUMNA_CLIENTE].unique().tolist()
-    
-    # Estado inicial: todo seleccionado
-    st.session_state.check_productos = True
-    st.session_state.check_clientes = True
-    st.session_state.multi_productos = st.session_state.productos_lista
-    st.session_state.multi_clientes = st.session_state.clientes_lista
-
-def toggle_todos(tipo):
-    """Callback: Se dispara cuando se hace clic en un checkbox 'Todos'."""
-    if tipo == 'productos':
-        if st.session_state.check_productos:
-            # Si se marcó "Todos", llenar el multiselect
-            st.session_state.multi_productos = st.session_state.productos_lista
-        else:
-            # Si se desmarcó, vaciar el multiselect
-            st.session_state.multi_productos = []
-    
-    elif tipo == 'clientes':
-        if st.session_state.check_clientes:
-            st.session_state.multi_clientes = st.session_state.clientes_lista
-        else:
-            st.session_state.multi_clientes = []
-
-def sync_check_desde_multi(tipo):
-    """Callback: Se dispara al cambiar un multiselect."""
-    if tipo == 'productos':
-        # Si el usuario selecciona todos manualmente, marcar el check
-        if len(st.session_state.multi_productos) == len(st.session_state.productos_lista):
-            st.session_state.check_productos = True
-        else:
-            # Si falta aunque sea uno, desmarcar el check
-            st.session_state.check_productos = False
-            
-    elif tipo == 'clientes':
-        if len(st.session_state.multi_clientes) == len(st.session_state.clientes_lista):
-            st.session_state.check_clientes = True
-        else:
-            st.session_state.check_clientes = False
-
 # --- Funciones de Carga y Preparación de Datos ---
 
+# La carga de datos SÍ la dejamos en caché. Esto es seguro y rápido.
 @st.cache_data
 def cargar_datos(nombre_archivo):
     """Carga y pre-procesa los datos desde el CSV."""
@@ -84,7 +34,7 @@ def cargar_datos(nombre_archivo):
         return df
     except FileNotFoundError:
         st.error(f"Error: No se encontró el archivo '{nombre_archivo}'.")
-        st.error("Asegúrate de que el archivo esté en la misma carpeta que 'dashboard.py'.")
+        st.error("Verifica que la ruta sea correcta (ej. 'data/archivo.csv').")
         return None
     except Exception as e:
         st.error(f"Error al cargar o procesar el archivo: {e}")
@@ -95,18 +45,15 @@ def preparar_series_de_tiempo(df_filtrado, metrica_seleccionada):
     if df_filtrado.empty:
         return None
     
-    # Agrupar por fecha (sumar ventas si se seleccionan múltiples productos/clientes)
     ts_data = df_filtrado.groupby(COLUMNA_FECHA)[metrica_seleccionada].sum().reset_index()
     ts_data = ts_data.set_index(COLUMNA_FECHA)
-    
-    # Asegurar frecuencia mensual (MS = Month Start) y rellenar ceros
     ts_data = ts_data.asfreq('MS', fill_value=0)
-    ts_data = ts_data[metrica_seleccionada] # Convertir a Series
+    ts_data = ts_data[metrica_seleccionada]
     
-    # Asegurarnos de tener suficientes datos para los modelos
-    if len(ts_data) < 12:
-        st.warning("Advertencia: Se tienen menos de 12 meses de datos. Las predicciones pueden no ser fiables.")
-        return None
+    if len(ts_data) < 24: # Aumentamos el mínimo para modelos estacionales
+        st.warning("Advertencia: Se tienen menos de 24 meses de datos. Las predicciones estacionales pueden no ser fiables.")
+        if len(ts_data) < 12:
+             return None
         
     return ts_data
 
@@ -115,23 +62,25 @@ def preparar_series_de_tiempo(df_filtrado, metrica_seleccionada):
 def calcular_metricas(y_true, y_pred):
     """Calcula RMSE y MAPE para un modelo."""
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-    # Evitar división por cero en MAPE
     mape = mean_absolute_percentage_error(y_true[y_true != 0], y_pred[y_true != 0])
     return {'RMSE': rmse, 'MAPE': mape}
 
 # --- Funciones de Modelos ---
-# Cada función entrena, predice en test, y luego re-entrena y predice el futuro.
 
 def run_model(model_name, model_func, ts_train, ts_test, ts_full, n_forecast):
-    """Función genérica para correr un modelo y capturar resultados."""
+    """
+    Función genérica para correr un modelo.
+    Ahora devuelve la predicción Y el intervalo de confianza.
+    """
     start_time = time.time()
     
     # 1. Entrenar en 'train' y predecir en 'test' para métricas
-    pred_test = model_func(ts_train, len(ts_test))
+    # No necesitamos el intervalo para el test, así que tomamos el primer valor [0]
+    pred_test, _ = model_func(ts_train, len(ts_test)) 
     metrics = calcular_metricas(ts_test, pred_test)
     
     # 2. Entrenar en 'full' y predecir el futuro
-    pred_future = model_func(ts_full, n_forecast)
+    pred_future, conf_int = model_func(ts_full, n_forecast)
     
     end_time = time.time()
     st.write(f"Modelo '{model_name}' completado en {end_time - start_time:.2f}s")
@@ -139,49 +88,23 @@ def run_model(model_name, model_func, ts_train, ts_test, ts_full, n_forecast):
     return {
         'name': model_name,
         'metrics': metrics,
-        'forecast': pred_future
+        'forecast': pred_future,
+        'interval': conf_int  # <-- ¡NUEVO!
     }
 
-# Modelos específicos
-def model_linear_regression(ts_data, n_steps):
-    """Modelo de Regresión Lineal simple sobre el tiempo."""
-    X_train = np.arange(len(ts_data)).reshape(-1, 1)
-    y_train = ts_data.values
-    
-    model = LinearRegression()
-    model.fit(X_train, y_train)
-    
-    X_future = np.arange(len(ts_data), len(ts_data) + n_steps).reshape(-1, 1)
-    forecast = model.predict(X_future)
-    return pd.Series(forecast, index=pd.date_range(start=ts_data.index[-1] + pd.DateOffset(months=1), periods=n_steps, freq='MS'))
-
-def model_moving_average(ts_data, n_steps):
-    """Predicción simple usando el promedio móvil de los últimos 6 meses."""
-    window = 6
-    if len(ts_data) < window:
-        window = len(ts_data)
-        
-    forecast_value = ts_data.rolling(window=window).mean().iloc[-1]
-    forecast = np.repeat(forecast_value, n_steps)
-    return pd.Series(forecast, index=pd.date_range(start=ts_data.index[-1] + pd.DateOffset(months=1), periods=n_steps, freq='MS'))
+# --- Modelos Potentes (No planos) ---
 
 def model_holt_winters(ts_data, n_steps):
-    """
-    Suavizamiento Exponencial Triple (Holt-Winters)
-    Captura Tendencia y Estacionalidad.
-    """
-    # Asumimos una tendencia aditiva y estacionalidad aditiva.
-    # Es más robusto para datos con posibles ceros que 'mul' (multiplicativo).
+    """Suavizamiento Exponencial Triple (Holt-Winters)."""
     try:
         model = ExponentialSmoothing(
             ts_data, 
             trend='add', 
             seasonal='add', 
-            seasonal_periods=12 # 12 meses
+            seasonal_periods=12
         ).fit()
-    except Exception as e:
-        # Fallback por si los datos son muy cortos o no tienen estacionalidad
-        st.warning(f"Holt-Winters (add/add) falló ({e}). Intentando sin tendencia.")
+    except Exception:
+        # Fallback si falla el modelo completo
         try:
             model = ExponentialSmoothing(
                 ts_data, 
@@ -190,177 +113,54 @@ def model_holt_winters(ts_data, n_steps):
                 seasonal_periods=12
             ).fit()
         except Exception:
-            # Fallback final al modelo simple si todo falla
-            st.warning("Holt-Winters (seasonal) falló. Usando Suavizamiento Simple.")
+            # Fallback final
             model = SimpleExpSmoothing(ts_data, initialization_method="estimated").fit()
 
     forecast = model.forecast(n_steps)
-    return forecast
+    return forecast, None # No devuelve intervalo de confianza
 
 def model_arima(ts_data, n_steps):
-    """
-    Auto-ARIMA (SARIMA) optimizado para velocidad en el dashboard.
-    """
-    
-    # --- Parámetros de velocidad ---
-    # stepwise=True (que ya teníamos) es la clave principal.
-    # Los siguientes parámetros 'max_' limitan el espacio de búsqueda.
-    
+    """Auto-ARIMA (SARIMA) optimizado y con intervalo de confianza."""
     model = auto_arima(ts_data, 
-                       seasonal=True,        # Activar SARIMA
-                       m=12,                 # Estacionalidad de 12 meses
-                       stepwise=True,        # Búsqueda "inteligente" (¡la más rápida!)
-                       suppress_warnings=True,
-                       error_action='ignore',
-                       
-                       # --- ¡NUEVOS LÍMITES PARA VELOCIDAD! ---
-                       max_p=2,              # Máximo orden P (de 3 a 2)
-                       max_q=2,              # Máximo orden Q (de 3 a 2)
-                       max_P=1,              # Máximo orden P estacional (de 2 a 1)
-                       max_Q=1,              # Máximo orden Q estacional (de 2 a 1)
-                       
-                       # Parámetros que ya teníamos
-                       start_p=1, start_q=1,
-                       start_P=0,
-                       d=None,               # Dejar que determine 'd'
-                       D=1,                  # Asumir una diferencia estacional
-                       trace=False
-                       )
+                       seasonal=True, m=12,
+                       stepwise=True, suppress_warnings=True, error_action='ignore',
+                       max_p=2, max_q=2, max_P=1, max_Q=1,
+                       d=None, D=1)
     
-    forecast = model.predict(n_periods=n_steps)
-    return forecast
+    # Pedimos la predicción Y el intervalo de confianza (alpha=0.1 es 90% confianza)
+    forecast, conf_int_df = model.predict(n_periods=n_steps, return_conf_int=True, alpha=0.1)
+    
+    # Convertir el array de numpy a un DataFrame con nombres
+    conf_int_result = pd.DataFrame(conf_int_df, index=forecast.index, columns=['lower', 'upper'])
+    
+    return forecast, conf_int_result
 
 def model_prophet(ts_data, n_steps):
-    """Modelo Prophet de Facebook."""
+    """Modelo Prophet con intervalo de confianza."""
     df_prophet = ts_data.reset_index()
     df_prophet.columns = ['ds', 'y']
     
-    model = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
+    # Nivel de intervalo de 0.90 (90%)
+    model = Prophet(yearly_seasonality=True, weekly_seasonality=False, 
+                    daily_seasonality=False, interval_width=0.90)
     model.fit(df_prophet)
     
     future = model.make_future_dataframe(periods=n_steps, freq='MS')
     forecast_df = model.predict(future)
     
     # Extraer solo la predicción futura
-    forecast = forecast_df.iloc[-n_steps:]['yhat']
+    future_results = forecast_df.iloc[-n_steps:]
+    
+    # Extraer predicción puntual
+    forecast = future_results['yhat']
     forecast.index = pd.date_range(start=ts_data.index[-1] + pd.DateOffset(months=1), periods=n_steps, freq='MS')
-    return forecast
-
-def model_croston(ts_data, n_steps):
-    """Modelo de Croston para demanda intermitente."""
     
-    # 1. Separar la serie
-    non_zero_data = ts_data[ts_data > 0]
+    # Extraer intervalos y renombrar columnas
+    conf_int_result = future_results[['yhat_lower', 'yhat_upper']]
+    conf_int_result.columns = ['lower', 'upper']
+    conf_int_result.index = forecast.index
     
-    # Si no hay ventas, la predicción es 0
-    if non_zero_data.empty:
-        return pd.Series(np.zeros(n_steps), index=pd.date_range(start=ts_data.index[-1] + pd.DateOffset(months=1), periods=n_steps, freq='MS'))
-    
-    # 2. Calcular los intervalos entre ventas
-    indices = np.where(ts_data > 0)[0]
-    
-    # Si solo hay 1 venta, no podemos calcular intervalos
-    if len(indices) < 2:
-        return pd.Series(np.zeros(n_steps), index=pd.date_range(start=ts_data.index[-1] + pd.DateOffset(months=1), periods=n_steps, freq='MS'))
-    
-    # El primer intervalo es desde el inicio + 1
-    first_interval = indices[0] + 1
-    other_intervals = np.diff(indices)
-    
-    # Combinar en una Serie de pandas
-    intervals = pd.Series(np.concatenate(([first_interval], other_intervals)), index=non_zero_data.index)
-
-    # 3. Aplicar Suavizamiento Exponencial Simple (SES) a ambas series
-    # Usamos 'estimated' para que encuentre el mejor alpha
-    ses_demand = SimpleExpSmoothing(non_zero_data, initialization_method="estimated").fit()
-    ses_interval = SimpleExpSmoothing(intervals, initialization_method="estimated").fit()
-    
-    # 4. Pronosticar el siguiente valor de cada uno
-    forecast_demand = ses_demand.forecast(1).iloc[0]
-    forecast_interval = ses_interval.forecast(1).iloc[0]
-    
-    # 5. Calcular la predicción de Croston
-    # Evitar división por cero
-    if forecast_interval == 0:
-        forecast_value = 0
-    else:
-        forecast_value = forecast_demand / forecast_interval
-        
-    # El pronóstico de Croston es un valor constante (la tasa promedio)
-    forecast = np.repeat(forecast_value, n_steps)
-    
-    return pd.Series(forecast, index=pd.date_range(start=ts_data.index[-1] + pd.DateOffset(months=1), periods=n_steps, freq='MS'))
-
-@st.cache_data # ¡Mantenemos el caché!
-def run_model_pipeline(_productos_sel, _clientes_sel, _metrica_sel, _n_forecast): # <--- CAMBIO AQUÍ
-    """
-    Ejecuta el pipeline completo.
-    Ahora solo recibe los FILTROS como argumentos.
-    """
-    
-    # --- 1. Cargar datos (DENTRO del caché) ---
-    # Esto es instantáneo porque cargar_datos() también está cacheado
-    _df_completo = cargar_datos(NOMBRE_ARCHIVO_DATOS) # <--- AÑADE ESTA LÍNEA
-    if _df_completo is None:
-        st.error("Error fatal: No se pudieron cargar los datos dentro del pipeline.")
-        return pd.DataFrame(), pd.DataFrame(), None
-
-    # --- 2. Filtrar datos (DENTRO del caché) ---
-    if not _productos_sel or not _clientes_sel:
-        st.warning("Advertencia: No hay productos o clientes seleccionados.")
-        return pd.DataFrame(), pd.DataFrame(), None # Devolver DFs vacíos y ts_full=None
-        
-    df_filtrado = _df_completo[
-        (_df_completo[COLUMNA_PRODUCTO].isin(_productos_sel)) &
-        (_df_completo[COLUMNA_CLIENTE].isin(_clientes_sel))
-    ]
-    
-    # --- 2. Preparar Series de Tiempo (DENTRO del caché) ---
-    ts_full = preparar_series_de_tiempo(df_filtrado, _metrica_sel)
-    
-    if ts_full is None:
-        st.warning("Advertencia: No hay suficientes datos para la serie de tiempo con esos filtros.")
-        return pd.DataFrame(), pd.DataFrame(), None
-
-    # --- 3. División Train/Test (DENTRO del caché) ---
-    test_size = _n_forecast
-    if len(ts_full) <= test_size:
-        st.error(f"Error: Se necesitan más de {test_size} meses para la validación.")
-        return pd.DataFrame(), pd.DataFrame(), ts_full # Devolver ts_full para el gráfico
-
-    ts_train = ts_full.iloc[:-test_size]
-    ts_test = ts_full.iloc[-test_size:]
-    
-    # --- 4. Pipeline de Modelos (Esto ya estaba) ---
-    st.write("Ejecutando pipeline de modelos (Esto se cacheará la primera vez)...")
-    
-    model_pipeline = [
-        ('Regresión Lineal', model_linear_regression),
-        ('Promedio Móvil (6m)', model_moving_average),
-        ('Holt-Winters', model_holt_winters),
-        ('ARIMA', model_arima),
-        ('Prophet', model_prophet),
-        ('Método Croston', model_croston)
-    ]
-    
-    all_metrics = {}
-    all_forecasts = {}
-
-    for name, func in model_pipeline:
-        try:
-            # Usamos las variables locales que acabamos de crear
-            resultado = run_model(name, func, ts_train, ts_test, ts_full, _n_forecast)
-            all_metrics[name] = resultado['metrics']
-            all_forecasts[name] = resultado['forecast']
-        except Exception as e:
-            st.error(f"Error al ejecutar el modelo '{name}': {e}")
-
-    df_metrics = pd.DataFrame(all_metrics).T.sort_values(by='MAPE')
-    df_forecast = pd.DataFrame(all_forecasts)
-    df_forecast.index.name = "Fecha"
-    
-    # Devolvemos también ts_full para poder graficarlo fuera
-    return df_metrics, df_forecast, ts_full
+    return forecast, conf_int_result
 
 # --- Función de Gemini AI ---
 
@@ -371,13 +171,14 @@ def get_gemini_analysis(metrics_summary, n_meses, metrica_nombre):
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        # Usamos el modelo más rápido y moderno
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
         Eres un analista de datos senior especializado en pronósticos de ventas.
         Quiero predecir '{metrica_nombre}' para los próximos {n_meses} meses.
         
-        He corrido 5 modelos y he calculado sus métricas de error (RMSE y MAPE) en un conjunto de prueba. 
+        He corrido 3 modelos (SARIMA, Prophet, Holt-Winters) y he calculado sus métricas de error (RMSE y MAPE) en un conjunto de prueba. 
         Un valor más bajo es mejor para ambas métricas.
 
         Estos son los resultados:
@@ -385,16 +186,15 @@ def get_gemini_analysis(metrics_summary, n_meses, metrica_nombre):
 
         Por favor, responde con lo siguiente en un formato markdown claro:
         
-        1.  **Recomendación del Modelo:** ¿Cuál es el modelo más eficiente y por qué? (Considera ambas métricas, pero da prioridad a MAPE ya que es un error porcentual y más fácil de comparar).
-        2.  **Análisis de Resultados:** Explica brevemente por qué este modelo pudo haber ganado (ej. "Probablemente capturó bien la tendencia/estacionalidad...") y por qué otros pudieron fallar (ej. "La regresión lineal es muy simple...").
-        3.  **Advertencia:** Termina con una breve advertencia sobre la confianza en las predicciones.
+        1.  **Recomendación del Modelo:** ¿Cuál es el modelo más eficiente y por qué? (Prioriza MAPE).
+        2.  **Análisis de Resultados:** Explica brevemente por qué este modelo pudo haber ganado (ej. "SARIMA/Prophet capturó bien la estacionalidad...") y por qué otros pudieron fallar.
         """
         
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
         st.error(f"Error al contactar la API de Gemini: {e}")
-        return "No se pudo generar el análisis. Verifica tu API Key o la configuración."
+        return "No se pudo generar el análisis. Verifica tu API Key o el nombre del modelo."
 
 # --- == APLICACIÓN PRINCIPAL (STREAMLIT) == ---
 
@@ -404,57 +204,37 @@ st.title("📈 Dashboard de Predicción de Ventas")
 df = cargar_datos(NOMBRE_ARCHIVO_DATOS)
 
 if df is not None:
-
-    # --- Configurar la memoria (¡NUEVO!) ---
-    setup_session_state(df)
     
     # --- Barra Lateral (Filtros) ---
     st.sidebar.header("⚙️ Configuración de la Predicción")
     
-    api_key = st.sidebar.text_input("🔑 API Key de Google Gemini", type="password", help="Necesaria para el análisis de IA")
+    api_key = st.sidebar.text_input("🔑 API Key de Google Gemini", type="password")
     
-    # --- Lógica de Filtros con Memoria (st.session_state) ---
+    # --- Lógica de Filtros Simple (¡SIN CACHÉ!) ---
+    # Esta lógica es simple. Streamlit recuerda la selección del
+    # multiselect entre ejecuciones mientras no se refresque la página.
     
-    # 1. Inicializar la "memoria" para los checkboxes
-    #    (Esto solo se ejecuta una vez en la primera carga)
-    if 'todos_productos' not in st.session_state:
-        st.session_state.todos_productos = True
-    if 'todos_clientes' not in st.session_state:
-        st.session_state.todos_clientes = True
-    
-    # --- Filtros de Producto (LÓGICA DEFINITIVA) ---
-    st.sidebar.checkbox(
-        "Seleccionar Todos los Productos",
-        key='check_productos',                     # Conecta a la memoria
-        on_change=toggle_todos, args=('productos',) # Llama al callback
-    )
-    
+    productos_lista = df[COLUMNA_PRODUCTO].unique().tolist()
+    # Inicia con todo seleccionado
     productos_seleccionados = st.sidebar.multiselect(
-        "Selecciona Productos:",
-        options=st.session_state.productos_lista,
-        key='multi_productos',                     # Conecta a la memoria
-        on_change=sync_check_desde_multi, args=('productos',) # Llama al callback
-    )
-
-    # --- Filtros de Cliente (LÓGICA DEFINITIVA) ---
-    st.sidebar.checkbox(
-        "Seleccionar Todos los Clientes",
-        key='check_clientes',
-        on_change=toggle_todos, args=('clientes',)
+        "Selecciona Productos:", 
+        options=productos_lista, 
+        default=productos_lista
     )
     
+    clientes_lista = df[COLUMNA_CLIENTE].unique().tolist()
+    # Inicia con todo seleccionado
     clientes_seleccionados = st.sidebar.multiselect(
-        "Selecciona Clientes:",
-        options=st.session_state.clientes_lista,
-        key='multi_clientes',
-        on_change=sync_check_desde_multi, args=('clientes',)
+        "Selecciona Clientes:", 
+        options=clientes_lista, 
+        default=clientes_lista
     )
-
-    # --- Filtros de Métrica y Horizonte (esto se queda igual) ---
+    
+    # --- Filtros de Métrica y Horizonte ---
     metrica_seleccionada = st.sidebar.selectbox("Selecciona la Métrica a Predecir:", METRICAS_PREDICCION)
     n_meses_prediccion = st.sidebar.slider("Meses a Predecir:", min_value=1, max_value=24, value=12)
     
-    # Botón para ejecutar
+    # --- Botón para ejecutar ---
     if st.sidebar.button("🚀 Generar Predicción", type="primary"):
         
         if not productos_seleccionados or not clientes_seleccionados:
@@ -462,87 +242,132 @@ if df is not None:
         elif not api_key:
             st.error("Por favor, introduce tu API Key de Gemini en la barra lateral.")
         else:
+            # ¡SIN CACHÉ! Esto se ejecuta siempre
             with st.spinner(f"Ejecutando predicción para {n_meses_prediccion} meses... Esto puede tardar unos minutos..."):
                 
-                # --- 1. Conversión de filtros a Tuplas ---
-                # Las tuplas son "hashables" y garantizan que el caché funcione.
-                # sorted() asegura que ['A', 'B'] y ['B', 'A'] se traten como el mismo filtro.
-                productos_tuple = tuple(sorted(productos_seleccionados))
-                clientes_tuple = tuple(sorted(clientes_seleccionados))
-
-                # --- 2. Ejecución del Pipeline Cacheado ---
-                # Pasamos el DataFrame original (df) y los filtros (tuplas)
-                df_metrics, df_forecast, ts_full = run_model_pipeline(
-                    productos_tuple,
-                    clientes_tuple,
-                    metrica_seleccionada,
-                    n_meses_prediccion
-                )
-
-                # --- 3. Mostrar Resultados ---
-                # Comprobar si la ejecución fue exitosa (si ts_full no es None)
+                # --- 1. Preparación de Datos (se hace siempre) ---
+                df_filtrado = df[
+                    (df[COLUMNA_PRODUCTO].isin(productos_seleccionados)) &
+                    (df[COLUMNA_CLIENTE].isin(clientes_seleccionados))
+                ]
+                
+                ts_full = preparar_series_de_tiempo(df_filtrado, metrica_seleccionada)
+                
                 if ts_full is not None:
                     
-                    # --- 4. Análisis con Gemini ---
-                    # Comprobar si se generaron métricas (si no hubo error en train/test)
-                    if not df_metrics.empty:
+                    # --- 2. División Train/Test (se hace siempre) ---
+                    test_size = n_meses_prediccion
+                    if len(ts_full) <= (test_size + 12): # Necesitamos al menos 1 año + test
+                        st.error(f"Error: No hay suficientes datos. Se necesitan más de {test_size + 12} meses para la validación.")
+                    else:
+                        ts_train = ts_full.iloc[:-test_size]
+                        ts_test = ts_full.iloc[-test_size:]
+                        
+                        # --- 3. Ejecución de Modelos (se hace siempre) ---
+                        st.write("Entrenando modelos...")
+                        
+                        model_pipeline = [
+                            ('SARIMA', model_arima),
+                            ('Prophet', model_prophet),
+                            ('Holt-Winters', model_holt_winters)
+                        ]
+                        
+                        all_metrics = {}
+                        all_forecasts = {}
+                        all_intervals = {} # ¡NUEVO! Para guardar los intervalos
+                        
+                        for name, func in model_pipeline:
+                            try:
+                                resultado = run_model(name, func, ts_train, ts_test, ts_full, n_meses_prediccion)
+                                all_metrics[name] = resultado['metrics']
+                                all_forecasts[name] = resultado['forecast']
+                                all_intervals[name] = resultado['interval'] # Guardar intervalo
+                            except Exception as e:
+                                st.error(f"Error al ejecutar el modelo '{name}': {e}")
+                        
+                        if not all_metrics:
+                            st.error("No se pudieron ejecutar los modelos. Revisa los datos o filtros.")
+                            st.stop()
+                            
+                        df_metrics = pd.DataFrame(all_metrics).T.sort_values(by='MAPE')
+                        df_forecast = pd.DataFrame(all_forecasts)
+                        df_forecast.index.name = "Fecha"
+
+                        # --- 4. Análisis con Gemini ---
                         st.write("Enviando resultados a Gemini para análisis...")
                         with st.spinner("🧠 Gemini está pensando..."):
                             analisis_gemini = get_gemini_analysis(df_metrics, n_meses_prediccion, metrica_seleccionada)
                         
                         st.subheader("🤖 Análisis y Recomendación (Gemini AI)")
                         st.markdown(analisis_gemini)
-                    else:
-                        st.info("No se generó análisis de IA (datos insuficientes para validación).")
-
-                    # --- 5. Gráfico ---
-                    st.subheader("📊 Gráfico de Predicción vs Histórico")
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(
-                        x=ts_full.index, y=ts_full.values,
-                        mode='lines+markers',
-                        name='Datos Históricos'
-                    ))
-                    # Predicciones
-                    for model_name in df_forecast.columns:
+                        
+                        # --- 5. Gráfico de Comparación (Todos los modelos) ---
+                        st.subheader("📊 Gráfico de Comparación (Todos los Modelos)")
+                        fig = go.Figure()
                         fig.add_trace(go.Scatter(
-                            x=df_forecast.index, y=df_forecast[model_name],
-                            mode='lines',
-                            name=f'Predicción: {model_name}'
+                            x=ts_full.index, y=ts_full.values,
+                            mode='lines+markers', name='Datos Históricos'
                         ))
-                    
-                    fig.update_layout(
-                        title=f"Predicción de '{metrica_seleccionada}'",
-                        xaxis_title="Fecha",
-                        yaxis_title=metrica_seleccionada,
-                        legend_title="Series"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # --- 6. Tablas de Resultados ---
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.subheader(f"🗓️ Tabla de Predicciones")
-                        st.dataframe(df_forecast.style.format("{:,.2f}"))
-                    
-                    with col2:
-                        st.subheader("🏆 Métricas de Desempeño (Test Set)")
-                        st.dataframe(df_metrics.style.format("{:,.2f}"))
-                        st.caption("Valores más bajos son mejores.")
-                
-                else:
-                    st.warning("No se pudieron generar predicciones con los filtros seleccionados.")
+                        for model_name in df_forecast.columns:
+                            fig.add_trace(go.Scatter(
+                                x=df_forecast.index, y=df_forecast[model_name],
+                                mode='lines', name=f'Predicción: {model_name}'
+                            ))
+                        fig.update_layout(title=f"Comparación de Modelos - '{metrica_seleccionada}'")
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # --- 6. GRÁFICO DEL MEJOR MODELO (¡NUEVO!) ---
+                        best_model_name = df_metrics.index[0]
+                        best_forecast = all_forecasts[best_model_name]
+                        best_interval = all_intervals.get(best_model_name) # .get() no da error si no existe
+
+                        st.subheader(f"📈 Análisis Detallado del Mejor Modelo: {best_model_name}")
+                        
+                        fig_best = go.Figure()
+
+                        # Intervalo de confianza (se dibuja primero para que quede de fondo)
+                        if best_interval is not None:
+                            fig_best.add_trace(go.Scatter(
+                                x=best_interval.index, y=best_interval['upper'],
+                                mode='lines', name='Máximo (Intervalo 90%)',
+                                line=dict(width=0.5, color='gray')
+                            ))
+                            fig_best.add_trace(go.Scatter(
+                                x=best_interval.index, y=best_interval['lower'],
+                                mode='lines', name='Mínimo (Intervalo 90%)',
+                                line=dict(width=0.5, color='gray'),
+                                fill='tonexty', # Rellena el área entre 'lower' y 'upper'
+                                fillcolor='rgba(150,150,150,0.2)' # Color de relleno gris claro
+                            ))
+
+                        # Dato Histórico
+                        fig_best.add_trace(go.Scatter(
+                            x=ts_full.index, y=ts_full.values,
+                            mode='lines', name='Datos Históricos',
+                            line=dict(color='blue', width=2)
+                        ))
+                        
+                        # Predicción del mejor modelo
+                        fig_best.add_trace(go.Scatter(
+                            x=best_forecast.index, y=best_forecast.values,
+                            mode='lines', name='Predicción (Mejor Modelo)',
+                            line=dict(color='green', width=3, dash='dash')
+                        ))
+                        
+                        fig_best.update_layout(title=f"Predicción e Intervalo de Confianza - {best_model_name}")
+                        st.plotly_chart(fig_best, use_container_width=True)
+
+                        # --- 7. Tablas de Resultados ---
+                        st.header("Detalle de Resultados")
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.subheader(f"🗓️ Tabla de Predicciones")
+                            st.dataframe(df_forecast.style.format("{:,.2f}"))
+                        
+                        with col2:
+                            st.subheader("🏆 Métricas de Desempeño (Test Set)")
+                            st.dataframe(df_metrics.style.format("{:,.2f}"))
+                            st.caption("Valores más bajos son mejores.")
 else:
-
-    st.info("Cargando datos... Si el error persiste, revisa el nombre del archivo.")
-
-
-
-
-
-
-
-
-
-
-
+    st.info("Cargando datos... Si el error persiste, revisa el nombre/ruta del archivo.")
