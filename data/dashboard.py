@@ -24,6 +24,55 @@ COLUMNA_CLIENTE = 'Cliente - Descripción'
 COLUMNA_FECHA = 'Fecha'
 METRICAS_PREDICCION = ['Pedido_piezas', 'Pedido_MXN', 'Factura_piezas', 'Factura_MXN']
 
+# --- Funciones de Callback para Filtros (¡NUEVO!) ---
+
+def setup_session_state(df):
+    """Inicializa la memoria de Streamlit la primera vez."""
+    if 'initialized' in st.session_state:
+        return
+    
+    st.session_state.initialized = True
+    st.session_state.productos_lista = df[COLUMNA_PRODUCTO].unique().tolist()
+    st.session_state.clientes_lista = df[COLUMNA_CLIENTE].unique().tolist()
+    
+    # Estado inicial: todo seleccionado
+    st.session_state.check_productos = True
+    st.session_state.check_clientes = True
+    st.session_state.multi_productos = st.session_state.productos_lista
+    st.session_state.multi_clientes = st.session_state.clientes_lista
+
+def toggle_todos(tipo):
+    """Callback: Se dispara cuando se hace clic en un checkbox 'Todos'."""
+    if tipo == 'productos':
+        if st.session_state.check_productos:
+            # Si se marcó "Todos", llenar el multiselect
+            st.session_state.multi_productos = st.session_state.productos_lista
+        else:
+            # Si se desmarcó, vaciar el multiselect
+            st.session_state.multi_productos = []
+    
+    elif tipo == 'clientes':
+        if st.session_state.check_clientes:
+            st.session_state.multi_clientes = st.session_state.clientes_lista
+        else:
+            st.session_state.multi_clientes = []
+
+def sync_check_desde_multi(tipo):
+    """Callback: Se dispara al cambiar un multiselect."""
+    if tipo == 'productos':
+        # Si el usuario selecciona todos manualmente, marcar el check
+        if len(st.session_state.multi_productos) == len(st.session_state.productos_lista):
+            st.session_state.check_productos = True
+        else:
+            # Si falta aunque sea uno, desmarcar el check
+            st.session_state.check_productos = False
+            
+    elif tipo == 'clientes':
+        if len(st.session_state.multi_clientes) == len(st.session_state.clientes_lista):
+            st.session_state.check_clientes = True
+        else:
+            st.session_state.check_clientes = False
+
 # --- Funciones de Carga y Preparación de Datos ---
 
 @st.cache_data
@@ -355,6 +404,9 @@ st.title("📈 Dashboard de Predicción de Ventas")
 df = cargar_datos(NOMBRE_ARCHIVO_DATOS)
 
 if df is not None:
+
+    # --- Configurar la memoria (¡NUEVO!) ---
+    setup_session_state(df)
     
     # --- Barra Lateral (Filtros) ---
     st.sidebar.header("⚙️ Configuración de la Predicción")
@@ -370,56 +422,35 @@ if df is not None:
     if 'todos_clientes' not in st.session_state:
         st.session_state.todos_clientes = True
     
-    # --- 2. Filtros de Producto ---
-    productos_lista = df[COLUMNA_PRODUCTO].unique().tolist()
-    
-    # Usamos 'key' para leer y escribir en la "memoria" de Streamlit
-    # Ya no usamos 'value=True', que era el error
-    todos_productos = st.sidebar.checkbox(
-        "Seleccionar Todos los Productos", 
-        key='todos_productos'
+    # --- Filtros de Producto (LÓGICA DEFINITIVA) ---
+    st.sidebar.checkbox(
+        "Seleccionar Todos los Productos",
+        key='check_productos',                     # Conecta a la memoria
+        on_change=toggle_todos, args=('productos',) # Llama al callback
     )
     
-    if todos_productos:
-        productos_seleccionados = st.sidebar.multiselect(
-            "Selecciona Productos:", 
-            options=productos_lista,
-            default=productos_lista,  # Llenar la lista
-            disabled=True             # Bloquearla
-        )
-    else:
-        # Si "Todos" está desmarcado, el usuario puede elegir
-        productos_seleccionados = st.sidebar.multiselect(
-            "Selecciona Productos:", 
-            options=productos_lista,
-            default=None,             # Empezar vacío (o con la selección anterior)
-            disabled=False            # Habilitar
-        )
+    productos_seleccionados = st.sidebar.multiselect(
+        "Selecciona Productos:",
+        options=st.session_state.productos_lista,
+        key='multi_productos',                     # Conecta a la memoria
+        on_change=sync_check_desde_multi, args=('productos',) # Llama al callback
+    )
 
-    # --- 3. Filtros de Cliente ---
-    clientes_lista = df[COLUMNA_CLIENTE].unique().tolist()
-    
-    todos_clientes = st.sidebar.checkbox(
-        "Seleccionar Todos los Clientes", 
-        key='todos_clientes'
+    # --- Filtros de Cliente (LÓGICA DEFINITIVA) ---
+    st.sidebar.checkbox(
+        "Seleccionar Todos los Clientes",
+        key='check_clientes',
+        on_change=toggle_todos, args=('clientes',)
     )
     
-    if todos_clientes:
-        clientes_seleccionados = st.sidebar.multiselect(
-            "Selecciona Clientes:",
-            options=clientes_lista,
-            default=clientes_lista,
-            disabled=True
-        )
-    else:
-        clientes_seleccionados = st.sidebar.multiselect(
-            "Selecciona Clientes:",
-            options=clientes_lista,
-            default=None,
-            disabled=False
-        )
-    
-    # Filtros de Métrica y Horizonte
+    clientes_seleccionados = st.sidebar.multiselect(
+        "Selecciona Clientes:",
+        options=st.session_state.clientes_lista,
+        key='multi_clientes',
+        on_change=sync_check_desde_multi, args=('clientes',)
+    )
+
+    # --- Filtros de Métrica y Horizonte (esto se queda igual) ---
     metrica_seleccionada = st.sidebar.selectbox("Selecciona la Métrica a Predecir:", METRICAS_PREDICCION)
     n_meses_prediccion = st.sidebar.slider("Meses a Predecir:", min_value=1, max_value=24, value=12)
     
@@ -504,6 +535,7 @@ if df is not None:
 else:
 
     st.info("Cargando datos... Si el error persiste, revisa el nombre del archivo.")
+
 
 
 
