@@ -89,7 +89,8 @@ def run_model(model_name, model_func, ts_train, ts_test, ts_full, n_forecast):
         'name': model_name,
         'metrics': metrics,
         'forecast': pred_future,
-        'interval': conf_int  # <-- ¡NUEVO!
+        'interval': conf_int,  # <-- ¡NUEVO!
+        'test_prediction': pred_test
     }
 
 # --- Modelos Potentes (No planos) ---
@@ -275,13 +276,15 @@ if df is not None:
                         all_metrics = {}
                         all_forecasts = {}
                         all_intervals = {} # ¡NUEVO! Para guardar los intervalos
+                        all_test_preds = {}
                         
                         for name, func in model_pipeline:
                             try:
                                 resultado = run_model(name, func, ts_train, ts_test, ts_full, n_meses_prediccion)
                                 all_metrics[name] = resultado['metrics']
                                 all_forecasts[name] = resultado['forecast']
-                                all_intervals[name] = resultado['interval'] # Guardar intervalo
+                                all_intervals[name] = resultado['interval']
+                                all_test_preds[name] = resultado['test_prediction'] # <--- ¡GUARDA EL RESULTADO!
                             except Exception as e:
                                 st.error(f"Error al ejecutar el modelo '{name}': {e}")
                         
@@ -300,6 +303,44 @@ if df is not None:
                         
                         st.subheader("🤖 Análisis y Recomendación (Gemini AI)")
                         st.markdown(analisis_gemini)
+
+                        # --- 5. GRÁFICO DE EVALUACIÓN (¡NUEVO!) ---
+                        st.subheader(f"🛠️ Gráfico de Evaluación del Modelo (Train/Test)")
+                        
+                        best_model_name_eval = df_metrics.index[0] # Tomamos el mejor modelo
+                        best_test_pred = all_test_preds[best_model_name_eval]
+
+                        fig_eval = go.Figure()
+
+                        # 1. Datos de Entrenamiento
+                        fig_eval.add_trace(go.Scatter(
+                            x=ts_train.index, y=ts_train.values,
+                            mode='lines', name='1. Datos de Entrenamiento (Train)',
+                            line=dict(color='blue')
+                        ))
+
+                        # 2. Datos Reales de Prueba
+                        fig_eval.add_trace(go.Scatter(
+                            x=ts_test.index, y=ts_test.values,
+                            mode='lines+markers', name='2. Datos Reales (Test)',
+                            line=dict(color='black', width=3)
+                        ))
+
+                        # 3. Predicción sobre el Test
+                        fig_eval.add_trace(go.Scatter(
+                            x=best_test_pred.index, y=best_test_pred.values,
+                            mode='lines', name=f'3. Predicción ({best_model_name_eval})',
+                            line=dict(color='red', width=3, dash='dash')
+                        ))
+                        
+                        fig_eval.update_layout(
+                            title=f"Comparación: Real vs. Predicción en el set de Prueba (20%)",
+                            xaxis_title="Fecha",
+                            yaxis_title=metrica_seleccionada,
+                            legend_title="Series"
+                        )
+                        st.plotly_chart(fig_eval, use_container_width=True)
+                        st.caption(f"Este gráfico muestra qué tan bien el modelo '{best_model_name_eval}' (línea roja) logró predecir los datos reales (línea negra) usando solo los datos de entrenamiento (línea azul).")
                         
                         # --- 5. Gráfico de Comparación (Todos los modelos) ---
                         st.subheader("📊 Gráfico de Comparación (Todos los Modelos)")
@@ -371,4 +412,5 @@ if df is not None:
                             st.caption("Valores más bajos son mejores.")
 else:
     st.info("Cargando datos... Si el error persiste, revisa el nombre/ruta del archivo.")
+
 
