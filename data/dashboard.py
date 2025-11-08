@@ -9,6 +9,7 @@ from prophet import Prophet
 import google.generativeai as genai
 import time
 import warnings
+import lightgbm as lgb
 
 # --- Configuración de la Página y Advertencias ---
 st.set_page_config(layout="wide", page_title="Dashboard de Predicción de Ventas")
@@ -56,6 +57,24 @@ def preparar_series_de_tiempo(df_filtrado, metrica_seleccionada):
              return None
         
     return ts_data
+
+def crear_features(df, target_col):
+    """
+    Crea características (features) a partir del índice de fecha
+    para un DataFrame que contiene la columna objetivo.
+    """
+    df = df.copy()
+    df['month'] = df.index.month
+    df['year'] = df.index.year
+    df['quarter'] = df.index.quarter
+    
+    # Creamos un lag de 12 meses (estacionalidad)
+    # Este es el feature más importante
+    df['lag_12'] = df[target_col].shift(12)
+    
+    features = ['month', 'year', 'quarter', 'lag_12']
+    
+    return df, features
 
 # --- Funciones de Métricas ---
 
@@ -162,6 +181,58 @@ def model_prophet(ts_data, n_steps):
     conf_int_result.index = forecast.index
     
     return forecast, conf_int_result
+
+def model_lightgbm(ts_data, n_steps):
+    """Modelo de Machine Learning (LightGBM) con Feature Engineering."""
+    
+    target_col = 'y'
+    df = ts_data.to_frame(name=target_col)
+    
+    # 1. Crear features para los datos de entrenamiento
+    df_con_features, feature_names = crear_features(df, target_col)
+    
+    # 2. Eliminar filas con NaN (creadas por el lag)
+    df_train = df_con_features.dropna()
+    
+    X_train = df_train[feature_names]
+    y_train = df_train[target_col]
+    
+    # Si no hay datos después de los lags, no se puede entrenar
+    if X_train.empty:
+        st.warning("Advertencia (LGBM): No hay suficientes datos para el lag de 12 meses.")
+        forecast = pd.Series(np.zeros(n_steps), index=pd.date_range(start=ts_data.index[-1] + pd.DateOffset(months=1), periods=n_steps, freq='MS'))
+        return forecast, None
+        
+    # 3. Entrenar el modelo LGBM
+    model = lgb.LGBMRegressor(
+        objective='regression_l1', # MAE es más robusto a outliers que MSE (L2)
+        n_estimators=100,
+        learning_rate=0.1,
+        random_state=42
+    )
+    model.fit(X_train, y_train)
+    
+    # 4. Crear features para las fechas futuras
+    last_date = ts_data.index[-1]
+    future_dates = pd.date_range(start=last_date + pd.DateOffset(months=1), periods=n_steps, freq='MS')
+    
+    df_future = pd.DataFrame(index=future_dates)
+    
+    # Concatenar los datos históricos + el esqueleto futuro
+    df_full = pd.concat([df, df_future])
+    
+    # Aplicar feature engineering a todo el conjunto
+    df_full_con_features, _ = crear_features(df_full, target_col)
+    
+    # Seleccionar solo las filas futuras para predecir
+    X_future = df_full_con_features.iloc[-n_steps:][feature_names]
+    
+    # 5. Predecir
+    forecast_values = model.predict(X_future)
+    
+    forecast = pd.Series(forecast_values, index=future_dates)
+    
+    return forecast, None # LGBM no da intervalos de confianza por defecto
 
 # --- Función de Gemini AI ---
 
@@ -279,7 +350,8 @@ if df is not None:
                         model_pipeline = [
                             ('SARIMA', model_arima),
                             ('Prophet', model_prophet),
-                            ('Holt-Winters', model_holt_winters)
+                            ('Holt-Winters', model_holt_winters),
+                            ('LightGBM', model_lightgbm)
                         ]
                         
                         all_metrics = {}
@@ -422,6 +494,7 @@ if df is not None:
                             st.caption("Valores más bajos son mejores.")
 else:
     st.info("Cargando datos... Si el error persiste, revisa el nombre/ruta del archivo.")
+
 
 
 
