@@ -11,9 +11,9 @@ warnings.filterwarnings('ignore')
 RUTA_HISTORICO = 'data/datos_finales_listos_para_modelo.csv'
 # Asumimos que así se llaman tus 3 archivos de predicciones
 RUTAS_PREDICCIONES = {
-    'ARIMA': 'data/predicciones_arima.csv',
-    'Holt-Winters': 'data/predicciones_holt_winters.csv',
-    'Red Neuronal (LSTM)': 'data/predicciones_lstm.csv'
+    'ARIMA': 'data/predicciones_precalculadas (ARIMA)_sin_decimales.csv',
+    'Holt-Winters': 'data/predicciones_precalculadas (holt_winters)_sin_decimales.csv',
+    'Red Neuronal (LSTM)': 'data/predicciones_lstm_sin_decimales.csv'
 }
 COL_PRODUCTO = 'Producto - Descripción'
 COL_CLIENTE = 'Cliente - Descripción'
@@ -168,3 +168,4 @@ else:
             height=400,
             use_container_width=True
         )
+
