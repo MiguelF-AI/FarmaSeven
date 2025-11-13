@@ -210,12 +210,34 @@ else:
         # --- NUEVA SECCIÓN: KPIs de PREDICCIÓN (dinámicos al modelo) ---
         st.subheader(f"Resumen de Predicción ({modelo_seleccionado})")
         
-        # Calcular KPIs de Predicción
-        ts_pred_sum = df_pred_filtrado.groupby(COL_FECHA)[metrica_seleccionada].sum()
+        # --- AÑADIDO: Slider de Meses ---
         
+        # 1. Calcular la serie de tiempo COMPLETA primero
+        ts_pred_sum_full = df_pred_filtrado.groupby(COL_FECHA)[metrica_seleccionada].sum()
+        
+        # 2. Determinar el máximo de meses (seguro)
+        max_meses_disponibles = len(ts_pred_sum_full)
+        # Usamos el mínimo entre lo que pidió el usuario (24) y lo que hay
+        max_slider = min(24, max_meses_disponibles)
+
+        meses_a_mostrar = 1 # Default por si max_slider es 0
+        if max_slider > 0:
+            meses_a_mostrar = st.slider(
+                "Selecciona el número de meses a pronosticar:",
+                min_value=1,
+                max_value=max_slider,
+                value=max_slider # Por default muestra todo
+            )
+        
+        # 3. Filtrar la serie de tiempo según el slider
+        ts_pred_sum = ts_pred_sum_full.head(meses_a_mostrar)
+        
+        # --- FIN SLIDER ---
+
+        # Calcular KPIs de Predicción (AHORA BASADOS EN 'ts_pred_sum' FILTRADO)
         kpi_pred_total = ts_pred_sum.sum()
         kpi_pred_avg = ts_pred_sum.mean()
-        kpi_pred_meses = ts_pred_sum.count()
+        kpi_pred_meses = ts_pred_sum.count() # Esto será igual a 'meses_a_mostrar'
         
         kpi_pred_total_str = f"${kpi_pred_total:,.0f}" if is_mxn else f"{kpi_pred_total:,.0f} pz"
         kpi_pred_avg_str = f"${kpi_pred_avg:,.0f}" if is_mxn else f"{kpi_pred_avg:,.0f} pz"
@@ -233,7 +255,7 @@ else:
             # Preparar datos históricos para el gráfico
             ts_hist_sum = df_hist_filtrado.groupby(COL_FECHA)[metrica_seleccionada].sum()
             
-            st.subheader(f"Gráfico de Predicción ({modelo_seleccionado}) - {metrica_seleccionada}")
+            st.subheader(f"Gráfico de Predicción ({modelo_seleccionado}) - {metrica_seleccionada} ({meses_a_mostrar} meses)")
             fig_ts = go.Figure()
 
             # Histórico
@@ -242,7 +264,7 @@ else:
                 mode='lines+markers', name='Datos Históricos (Total)'
             ))
             
-            # Predicción (ya calculada como ts_pred_sum)
+            # Predicción (YA FILTRADA por el slider)
             fig_ts.add_trace(go.Scatter(
                 x=ts_pred_sum.index, y=ts_pred_sum.values,
                 mode='lines', name=f'Predicción ({modelo_seleccionado})',
@@ -256,10 +278,14 @@ else:
 
 
         # --- Tabla de Predicción (Desglosada) ---
-        st.subheader(f"Tabla de Predicciones Desglosada ({modelo_seleccionado})")
+        st.subheader(f"Tabla de Predicciones Desglosada ({modelo_seleccionado}) - {meses_a_mostrar} meses")
+        
+        # --- AÑADIDO: Filtrar la tabla ---
+        fechas_seleccionadas = ts_pred_sum.index
+        df_tabla_filtrada = df_pred_filtrado[df_pred_filtrado[COL_FECHA].isin(fechas_seleccionadas)]
         
         columnas_tabla = [COL_PRODUCTO, COL_CLIENTE, COL_FECHA, metrica_seleccionada]
-        df_tabla = df_pred_filtrado[columnas_tabla]
+        df_tabla = df_tabla_filtrada[columnas_tabla]
         
         st.dataframe(
             df_tabla.style.format({
