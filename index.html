@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenido a PharmaSeven</title>
+    
+    <!-- Script de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Fuente Inter de Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Aplicamos la fuente Inter a toda la página */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100">
+
+    <!-- Contenedor principal -->
+    <main class="w-full">
+
+        <!-- SECCIÓN 1: HÉROE (Bienvenida) -->
+        <section class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-900 to-[#014888] relative overflow-hidden">
+            
+            <!-- Tarjeta de bienvenida -->
+            <div class="max-w-2xl w-full bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-8 sm:p-12 text-center border border-white/10 z-10">
+
+                <!-- Encabezado y Título -->
+                <header>
+                    <h1 class="text-5xl sm:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-white mb-4">
+                        PharmaSeven
+                    </h1>
+                    <p class="text-xl text-gray-300 mb-8">
+                        Bienvenido al proyecto de Pronóstico de Demanda.
+                    </p>
+                </header>
+
+                <!-- Descripción -->
+                <p class="text-lg text-gray-200 mb-10">
+                    Este proyecto, parte del Challenge CUGDL 2025B, presenta nuestros modelos de pronóstico para Collins Farmacéutica. Elige una opción para explorar.
+                </p>
+
+                <!-- Contenedor de Botones (responsive) -->
+                <div class="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6">
+
+                    <!-- Botón 1: Página de Predicciones -->
+                    <a href="https://pharmaseven.streamlit.app/" 
+                       target="_blank" 
+                       rel="noopener noreferrer"
+                       class="block w-full sm:w-auto px-8 py-4 rounded-lg font-semibold text-white bg-[#014888] hover:bg-[#0259a9] transition-all duration-300 shadow-lg hover:shadow-[#014888]/40 focus:outline-none focus:ring-2 focus:ring-[#014888] focus:ring-offset-2 focus:ring-offset-gray-900">
+                       Ir a Predicciones
+                    </a>
+
+                    <!-- Botón 2: Predicciones Precalculadas -->
+                    <a href="https://pharmaseven-prec.streamlit.app/" 
+                       target="_blank" 
+                       rel="noopener noreferrer"
+                       class="block w-full sm:w-auto px-8 py-4 rounded-lg font-semibold text-white bg-[#de211b] hover:bg-[#f0322c] transition-all duration-300 shadow-lg hover:shadow-[#de211b]/40 focus:outline-none focus:ring-2 focus:ring-[#de211b] focus:ring-offset-2 focus:ring-offset-gray-900">
+                       Ver Precalculadas
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECCIÓN 2: CONTEXTO DEL PROYECTO -->
+        <section class="py-20 px-4 sm:px-8 bg-gray-900">
+            <div class="max-w-5xl mx-auto">
+                <h2 class="text-4xl font-bold text-center mb-16 text-white">
+                    Contexto del <span class="text-cyan-400">Proyecto</span>
+                </h2>
+                <div class="grid md:grid-cols-2 gap-8">
+                    
+                    <!-- Card 1: El Desafío -->
+                    <div class="bg-gray-800 p-8 rounded-2xl border border-gray-700 shadow-lg">
+                        <h3 class="text-2xl font-bold mb-4 text-cyan-400">El Desafío: Pronóstico Asertivo</h3>
+                        <p class="text-gray-300 mb-4">
+                            Un pronóstico de demanda incorrecto genera serios problemas operativos y financieros para la empresa:
+                        </p>
+                        <ul class="space-y-3">
+                            <li class="flex items-start">
+                                <span class="text-red-500 font-bold mr-2">✕</span>
+                                <div><span class="font-semibold text-red-400">Desabasto:</span> Pérdida de ventas y confianza del cliente.</div>
+                            </li>
+                            <li class="flex items-start">
+                                <span class="text-yellow-500 font-bold mr-2">✕</span>
+                                <div><span class="font-semibold text-yellow-400">Sobreinventario:</span> Costos de almacén y riesgo de obsolescencia.</div>
+                            </li>
+                            <li class="flex items-start">
+                                <span class="text-gray-500 font-bold mr-2">✕</span>
+                                <div><span class="font-semibold text-gray-400">Ineficiencia:</span> Desequilibrio en la cadena de suministro y toma de decisiones errónea.</div>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Card 2: Sobre Collins Farmacéutica -->
+                    <div class="bg-gray-800 p-8 rounded-2xl border border-gray-700 shadow-lg">
+                        <h3 class="text-2xl font-bold mb-4 text-cyan-400">Sobre Collins Farmacéutica</h3>
+                        <p class="text-gray-300 mb-4">
+                            Una farmacéutica 100% mexicana con el objetivo de proveer salud y bienestar.
+                        </p>
+                        <ul class="list-disc list-inside space-y-2 text-gray-300">
+                            <li>+1,600 Colaboradores</li>
+                            <li>4 Plantas de Fabricación Certificadas</li>
+                            <li>15 Líneas Terapéuticas</li>
+                            <li>Fabricación de medicamentos genéricos de marca.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECCIÓN 3: NUESTRO PROCESO -->
+        <section class="py-20 px-4 sm:px-8 bg-gray-800/50">
+             <div class="max-w-6xl mx-auto">
+                <h2 class="text-4xl font-bold text-center mb-16 text-white">
+                    Nuestro <span class="text-cyan-400">Proceso de Predicción</span>
+                </h2>
+                
+                <!-- Contenedor de pasos -->
+                <div class="flex flex-col md:flex-row justify-between gap-6">
+                    
+                    <!-- Paso 1 -->
+                    <div class="flex-1 text-center p-6 bg-gray-800 rounded-2xl border border-gray-700 shadow-lg transform transition duration-300 hover:-translate-y-2">
+                        <div class="text-5xl mb-4 font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-[#014888]">1</div>
+                        <h3 class="text-xl font-semibold mb-2 text-white">Análisis de Datos</h3>
+                        <p class="text-gray-400 text-sm">Recopilación, limpieza y análisis de datos históricos de ventas, pedidos y tendencias del mercado.</p>
+                    </div>
+                    
+                    <!-- Paso 2 -->
+                    <div class="flex-1 text-center p-6 bg-gray-800 rounded-2xl border border-gray-700 shadow-lg transform transition duration-300 hover:-translate-y-2">
+                        <div class="text-5xl mb-4 font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-[#014888]">2</div>
+                        <h3 class="text-xl font-semibold mb-2 text-white">Modelado Estadístico</h3>
+                        <p class="text-gray-400 text-sm">Aplicación de métodos cuantitativos (Series de Tiempo, Regresión) para encontrar patrones y estimar la demanda.</p>
+                    </div>
+                    
+                    <!-- Paso 3 -->
+                    <div class="flex-1 text-center p-6 bg-gray-800 rounded-2xl border border-gray-700 shadow-lg transform transition duration-300 hover:-translate-y-2">
+                        <div class="text-5xl mb-4 font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-[#014888]">3</div>
+                        <h3 class="text-xl font-semibold mb-2 text-white">Validación y Métricas</h3>
+                        <p class="text-gray-400 text-sm">Evaluación de los modelos con métricas de exactitud (accuracy) para seleccionar el más asertivo.</p>
+                    </div>
+                    
+                    <!-- Paso 4 -->
+                    <div class="flex-1 text-center p-6 bg-gray-800 rounded-2xl border border-gray-700 shadow-lg transform transition duration-300 hover:-translate-y-2">
+                        <div class="text-5xl mb-4 font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-[#014888]">4</div>
+                        <h3 class="text-xl font-semibold mb-2 text-white">Pronóstico Final</h3>
+                        <p class="text-gray-400 text-sm">Generación del pronóstico mensual por producto y cliente, con intervalos de confianza.</p>
+                    </div>
+                </div>
+             </div>
+        </section>
+
+        <!-- SECCIÓN 4: LLAMADO A LA ACCIÓN (CTA) -->
+        <section class="py-24 px-4 sm:px-8 text-center bg-gradient-to-br from-[#014888] via-gray-900 to-gray-900">
+            <div class="max-w-2xl mx-auto">
+                <h2 class="text-4xl font-bold text-white mb-6">Explora las Aplicaciones</h2>
+                <p class="text-lg text-gray-200 mb-10">
+                    Interactúa con nuestros modelos y visualiza los datos y pronósticos en las aplicaciones de Streamlit.
+                </p>
+                
+                <!-- Contenedor de Botones (responsive) -->
+                <div class="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6">
+
+                    <!-- Botón 1: Página de Predicciones -->
+                    <a href="https://pharmaseven.streamlit.app/" 
+                       target="_blank" 
+                       rel="noopener noreferrer"
+                       class="block w-full sm:w-auto px-8 py-4 rounded-lg font-semibold text-white bg-[#014888] hover:bg-[#0259a9] transition-all duration-300 shadow-lg hover:shadow-[#014888]/40 focus:outline-none focus:ring-2 focus:ring-[#014888] focus:ring-offset-2 focus:ring-offset-gray-900">
+                       Ir a Predicciones
+                    </a>
+
+                    <!-- Botón 2: Predicciones Precalculadas -->
+                    <a href="https://pharmaseven-prec.streamlit.app/" 
+                       target="_blank" 
+                       rel="noopener noreferrer"
+                       class="block w-full sm:w-auto px-8 py-4 rounded-lg font-semibold text-white bg-[#de211b] hover:bg-[#f0322c] transition-all duration-300 shadow-lg hover:shadow-[#de211b]/40 focus:outline-none focus:ring-2 focus:ring-[#de211b] focus:ring-offset-2 focus:ring-offset-gray-900">
+                       Ver Precalculadas
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- FOOTER -->
+        <footer class="py-8 bg-gray-900 text-center">
+            <p class="text-gray-500">© 2025 - Equipo PharmaSeven</p>
+        </footer>
+
+    </main>
+
+</body>
+</html>
