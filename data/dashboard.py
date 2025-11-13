@@ -4,12 +4,12 @@ import plotly.graph_objects as go
 import warnings
 
 # --- Configuración de la Página ---
+# Sigue siendo 'wide' para aprovechar el espacio
 st.set_page_config(layout="wide", page_title="Dashboard de Predicción (Rápido)")
 warnings.filterwarnings('ignore')
 
 # --- Constantes ---
 RUTA_HISTORICO = 'data/datos_finales_listos_para_modelo.csv'
-# Asumimos que así se llaman tus 3 archivos de predicciones
 RUTAS_PREDICCIONES = {
     'ARIMA': 'data/predicciones_precalculadas (ARIMA)_sin_decimales.csv',
     'Holt-Winters': 'data/predicciones_precalculadas (holt_winters)_sin_decimales.csv',
@@ -63,16 +63,19 @@ productos_lista_completa = df_hist[COL_PRODUCTO].unique().tolist()
 clientes_lista_completa = df_hist[COL_CLIENTE].unique().tolist()
 modelos_lista_completa = df_pred['Modelo'].unique().tolist()
 
-# --- Barra Lateral (Filtros) ---
-st.sidebar.header("⚙️ Configuración del Dashboard")
+# --- Títulos Principales ---
+st.title("📈 Dashboard de Predicción (Versión Pre-calculada)")
+st.info("Esta versión es instantánea. Los modelos se pre-calcularon offline.")
 
 # --- Inicializar "Memoria" (Session State) ---
+# (Esta parte no cambia)
 if 'productos_seleccionados' not in st.session_state:
     st.session_state.productos_seleccionados = productos_lista_completa
 if 'clientes_seleccionados' not in st.session_state:
     st.session_state.clientes_seleccionados = clientes_lista_completa
 
 # --- Funciones de Callback ---
+# (Esta parte no cambia)
 def callback_select_all():
     st.session_state.productos_seleccionados = productos_lista_completa
     st.session_state.clientes_seleccionados = clientes_lista_completa
@@ -81,35 +84,50 @@ def callback_deselect_all():
     st.session_state.productos_seleccionados = []
     st.session_state.clientes_seleccionados = []
 
+# --- NUEVA SECCIÓN: Controles y Filtros en la Página Principal ---
+st.header("⚙️ Configuración del Dashboard")
+
 # --- Botones de Control ---
-st.sidebar.write("Control de Filtros:")
-col1, col2 = st.sidebar.columns(2)
+# Movidos de st.sidebar a st.columns
+st.write("Control de Filtros:")
+col1, col2, _ = st.columns([1, 1, 3]) # Columnas para los botones
 with col1:
     st.button("Seleccionar Todos", on_click=callback_select_all, use_container_width=True)
 with col2:
     st.button("Limpiar Todo", on_click=callback_deselect_all, use_container_width=True)
-st.sidebar.divider()
+
+st.divider()
 
 # --- Filtros (Conectados a la memoria) ---
-productos_seleccionados = st.sidebar.multiselect(
-    "Selecciona Productos:", 
-    options=productos_lista_completa, 
-    key='productos_seleccionados' 
-)
-clientes_seleccionados = st.sidebar.multiselect(
-    "Selecciona Clientes:", 
-    options=clientes_lista_completa, 
-    key='clientes_seleccionados' 
-)
+# Movidos de st.sidebar a st.columns
+col_filtros1, col_filtros2 = st.columns(2)
 
-# --- Filtros de Métrica y Modelo ---
-metrica_seleccionada = st.sidebar.selectbox("Selecciona la Métrica:", METRICAS)
-modelo_seleccionado = st.sidebar.selectbox("Selecciona el Modelo:", modelos_lista_completa)
+with col_filtros1:
+    productos_seleccionados = st.multiselect(
+        "Selecciona Productos:", 
+        options=productos_lista_completa, 
+        key='productos_seleccionados' # La 'key' es vital para la memoria
+    )
+    metrica_seleccionada = st.selectbox(
+        "Selecciona la Métrica:", 
+        METRICAS
+    )
 
-st.title("📈 Dashboard de Predicción (Versión Pre-calculada)")
-st.info("Esta versión es instantánea. Los modelos se pre-calcularon offline.")
+with col_filtros2:
+    clientes_seleccionados = st.multiselect(
+        "Selecciona Clientes:", 
+        options=clientes_lista_completa, 
+        key='clientes_seleccionados' # La 'key' es vital para la memoria
+    )
+    modelo_seleccionado = st.selectbox(
+        "Selecciona el Modelo:", 
+        modelos_lista_completa
+    )
+
+st.divider() # Separador visual antes de los gráficos
 
 # --- Lógica Principal (SIN MODELOS) ---
+# (Esta parte no cambia)
 if not productos_seleccionados or not clientes_seleccionados:
     st.warning("Por favor, selecciona al menos un producto y un cliente.")
 else:
@@ -168,4 +186,3 @@ else:
             height=400,
             use_container_width=True
         )
-
