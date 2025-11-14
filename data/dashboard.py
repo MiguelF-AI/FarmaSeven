@@ -440,131 +440,132 @@ if df is not None:
                                 except Exception as e:
                                     st.error(f"Error al ejecutar el modelo '{name}': {e}")
                         
-                        if not all_metrics:
-                            st.error("No se pudieron ejecutar los modelos. Revisa los datos o filtros.")
-                            st.stop()
+                            if not all_metrics:
+                                st.error("No se pudieron ejecutar los modelos. Revisa los datos o filtros.")
+                                st.stop()
+                                
+                            df_metrics = pd.DataFrame(all_metrics).T.sort_values(by='MAPE')
+                            df_forecast = pd.DataFrame(all_forecasts)
+                            df_forecast.index.name = "Fecha"
+    
+                            # --- 4. Análisis con Gemini ---
+                            st.write("Enviando resultados a Gemini para análisis...")
+                            with st.spinner("🧠 Gemini está pensando..."):
+                                analisis_gemini = get_gemini_analysis(df_metrics, n_meses_prediccion, metrica_seleccionada)
                             
-                        df_metrics = pd.DataFrame(all_metrics).T.sort_values(by='MAPE')
-                        df_forecast = pd.DataFrame(all_forecasts)
-                        df_forecast.index.name = "Fecha"
-
-                        # --- 4. Análisis con Gemini ---
-                        st.write("Enviando resultados a Gemini para análisis...")
-                        with st.spinner("🧠 Gemini está pensando..."):
-                            analisis_gemini = get_gemini_analysis(df_metrics, n_meses_prediccion, metrica_seleccionada)
-                        
-                        st.subheader("🤖 Análisis y Recomendación (Gemini AI)")
-                        st.markdown(analisis_gemini)
-
-                        
-                        # --- 5. Gráfico de Comparación (Todos los modelos) ---
-                        st.subheader("📊 Gráfico de Comparación (Todos los Modelos)")
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=ts_full.index, y=ts_full.values,
-                            mode='lines+markers', name='Datos Históricos'
-                        ))
-                        for model_name in df_forecast.columns:
+                            st.subheader("🤖 Análisis y Recomendación (Gemini AI)")
+                            st.markdown(analisis_gemini)
+    
+                            
+                            # --- 5. Gráfico de Comparación (Todos los modelos) ---
+                            st.subheader("📊 Gráfico de Comparación (Todos los Modelos)")
+                            fig = go.Figure()
                             fig.add_trace(go.Scatter(
-                                x=df_forecast.index, y=df_forecast[model_name],
-                                mode='lines', name=f'Predicción: {model_name}'
+                                x=ts_full.index, y=ts_full.values,
+                                mode='lines+markers', name='Datos Históricos'
                             ))
-                        fig.update_layout(title=f"Comparación de Modelos - '{metrica_seleccionada}'")
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # --- 6. GRÁFICO DEL MEJOR MODELO (¡NUEVO!) ---
-                        best_model_name = df_metrics.index[0]
-                        best_forecast = all_forecasts[best_model_name]
-                        best_interval = all_intervals.get(best_model_name) # .get() no da error si no existe
-
-                        st.subheader(f"📈 Análisis Detallado del Mejor Modelo: {best_model_name}")
-                        
-                        fig_best = go.Figure()
-
-                        # Intervalo de confianza (se dibuja primero para que quede de fondo)
-                        if best_interval is not None:
+                            for model_name in df_forecast.columns:
+                                fig.add_trace(go.Scatter(
+                                    x=df_forecast.index, y=df_forecast[model_name],
+                                    mode='lines', name=f'Predicción: {model_name}'
+                                ))
+                            fig.update_layout(title=f"Comparación de Modelos - '{metrica_seleccionada}'")
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # --- 6. GRÁFICO DEL MEJOR MODELO (¡NUEVO!) ---
+                            best_model_name = df_metrics.index[0]
+                            best_forecast = all_forecasts[best_model_name]
+                            best_interval = all_intervals.get(best_model_name) # .get() no da error si no existe
+    
+                            st.subheader(f"📈 Análisis Detallado del Mejor Modelo: {best_model_name}")
+                            
+                            fig_best = go.Figure()
+    
+                            # Intervalo de confianza (se dibuja primero para que quede de fondo)
+                            if best_interval is not None:
+                                fig_best.add_trace(go.Scatter(
+                                    x=best_interval.index, y=best_interval['upper'],
+                                    mode='lines', name='Máximo (Intervalo 90%)',
+                                    line=dict(width=0.5, color='gray')
+                                ))
+                                fig_best.add_trace(go.Scatter(
+                                    x=best_interval.index, y=best_interval['lower'],
+                                    mode='lines', name='Mínimo (Intervalo 90%)',
+                                    line=dict(width=0.5, color='gray'),
+                                    fill='tonexty', # Rellena el área entre 'lower' y 'upper'
+                                    fillcolor='rgba(150,150,150,0.2)' # Color de relleno gris claro
+                                ))
+    
+                            # Dato Histórico
                             fig_best.add_trace(go.Scatter(
-                                x=best_interval.index, y=best_interval['upper'],
-                                mode='lines', name='Máximo (Intervalo 90%)',
-                                line=dict(width=0.5, color='gray')
+                                x=ts_full.index, y=ts_full.values,
+                                mode='lines', name='Datos Históricos',
+                                line=dict(color='blue', width=2)
                             ))
+                            
+                            # Predicción del mejor modelo
                             fig_best.add_trace(go.Scatter(
-                                x=best_interval.index, y=best_interval['lower'],
-                                mode='lines', name='Mínimo (Intervalo 90%)',
-                                line=dict(width=0.5, color='gray'),
-                                fill='tonexty', # Rellena el área entre 'lower' y 'upper'
-                                fillcolor='rgba(150,150,150,0.2)' # Color de relleno gris claro
+                                x=best_forecast.index, y=best_forecast.values,
+                                mode='lines', name='Predicción (Mejor Modelo)',
+                                line=dict(color='green', width=3, dash='dash')
                             ))
-
-                        # Dato Histórico
-                        fig_best.add_trace(go.Scatter(
-                            x=ts_full.index, y=ts_full.values,
-                            mode='lines', name='Datos Históricos',
-                            line=dict(color='blue', width=2)
-                        ))
-                        
-                        # Predicción del mejor modelo
-                        fig_best.add_trace(go.Scatter(
-                            x=best_forecast.index, y=best_forecast.values,
-                            mode='lines', name='Predicción (Mejor Modelo)',
-                            line=dict(color='green', width=3, dash='dash')
-                        ))
-                        
-                        fig_best.update_layout(title=f"Predicción e Intervalo de Confianza - {best_model_name}")
-                        st.plotly_chart(fig_best, use_container_width=True)
-
-                        # --- 5. GRÁFICO DE EVALUACIÓN (¡NUEVO!) ---
-                        st.subheader(f"🛠️ Gráfico de Evaluación del Modelo (Train/Test)")
-                        
-                        best_model_name_eval = df_metrics.index[0] # Tomamos el mejor modelo
-                        best_test_pred = all_test_preds[best_model_name_eval]
-
-                        fig_eval = go.Figure()
-
-                        # 1. Datos de Entrenamiento
-                        fig_eval.add_trace(go.Scatter(
-                            x=ts_train.index, y=ts_train.values,
-                            mode='lines', name='1. Datos de Entrenamiento (80%)', # <-- CAMBIO DE TEXTO
-                            line=dict(color='blue')
-                        ))
-
-                        # 2. Datos Reales de Prueba
-                        fig_eval.add_trace(go.Scatter(
-                            x=ts_test.index, y=ts_test.values,
-                            mode='lines+markers', name='2. Datos Reales (Test - 20%)', # <-- CAMBIO DE TEXTO
-                            line=dict(color='black', width=3)
-                        ))
-
-                        # 3. Predicción sobre el Test
-                        fig_eval.add_trace(go.Scatter(
-                            x=best_test_pred.index, y=best_test_pred.values,
-                            mode='lines', name=f'3. Predicción ({best_model_name_eval})',
-                            line=dict(color='red', width=3)
-                        ))
-                        
-                        fig_eval.update_layout(
-                            title=f"Comparación: Real vs. Predicción en el set de Prueba (20%)", # <-- CAMBIO DE TEXTO
-                            xaxis_title="Fecha",
-                            yaxis_title=metrica_seleccionada,
-                            legend_title="Series"
-                        )
-                        st.plotly_chart(fig_eval, use_container_width=True)
-                        st.caption(f"Este gráfico muestra qué tan bien el modelo '{best_model_name_eval}'... en el set de Prueba (20%).") # <-- CAMBIO DE TEXTO
-                        
-                        # --- 7. Tablas de Resultados ---
-                        st.header("Detalle de Resultados")
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.subheader(f"🗓️ Tabla de Predicciones")
-                            st.dataframe(df_forecast.style.format("{:,.2f}"))
-                        
-                        with col2:
-                            st.subheader("🏆 Métricas de Desempeño (Test Set)")
-                            st.dataframe(df_metrics.style.format("{:,.2f}"))
-                            st.caption("Valores más bajos son mejores.")
+                            
+                            fig_best.update_layout(title=f"Predicción e Intervalo de Confianza - {best_model_name}")
+                            st.plotly_chart(fig_best, use_container_width=True)
+    
+                            # --- 5. GRÁFICO DE EVALUACIÓN (¡NUEVO!) ---
+                            st.subheader(f"🛠️ Gráfico de Evaluación del Modelo (Train/Test)")
+                            
+                            best_model_name_eval = df_metrics.index[0] # Tomamos el mejor modelo
+                            best_test_pred = all_test_preds[best_model_name_eval]
+    
+                            fig_eval = go.Figure()
+    
+                            # 1. Datos de Entrenamiento
+                            fig_eval.add_trace(go.Scatter(
+                                x=ts_train.index, y=ts_train.values,
+                                mode='lines', name='1. Datos de Entrenamiento (80%)', # <-- CAMBIO DE TEXTO
+                                line=dict(color='blue')
+                            ))
+    
+                            # 2. Datos Reales de Prueba
+                            fig_eval.add_trace(go.Scatter(
+                                x=ts_test.index, y=ts_test.values,
+                                mode='lines+markers', name='2. Datos Reales (Test - 20%)', # <-- CAMBIO DE TEXTO
+                                line=dict(color='black', width=3)
+                            ))
+    
+                            # 3. Predicción sobre el Test
+                            fig_eval.add_trace(go.Scatter(
+                                x=best_test_pred.index, y=best_test_pred.values,
+                                mode='lines', name=f'3. Predicción ({best_model_name_eval})',
+                                line=dict(color='red', width=3)
+                            ))
+                            
+                            fig_eval.update_layout(
+                                title=f"Comparación: Real vs. Predicción en el set de Prueba (20%)", # <-- CAMBIO DE TEXTO
+                                xaxis_title="Fecha",
+                                yaxis_title=metrica_seleccionada,
+                                legend_title="Series"
+                            )
+                            st.plotly_chart(fig_eval, use_container_width=True)
+                            st.caption(f"Este gráfico muestra qué tan bien el modelo '{best_model_name_eval}'... en el set de Prueba (20%).") # <-- CAMBIO DE TEXTO
+                            
+                            # --- 7. Tablas de Resultados ---
+                            st.header("Detalle de Resultados")
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.subheader(f"🗓️ Tabla de Predicciones")
+                                st.dataframe(df_forecast.style.format("{:,.2f}"))
+                            
+                            with col2:
+                                st.subheader("🏆 Métricas de Desempeño (Test Set)")
+                                st.dataframe(df_metrics.style.format("{:,.2f}"))
+                                st.caption("Valores más bajos son mejores.")
 else:
     st.info("Cargando datos... Si el error persiste, revisa el nombre/ruta del archivo.")
+
 
 
 
