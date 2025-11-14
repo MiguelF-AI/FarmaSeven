@@ -391,24 +391,29 @@ if df is not None:
                 
                 if ts_full is not None:
                         
-                        # --- ¡TRANSFORMACIÓN LOGARÍTMICA AQUÍ! ---
-                        # Usamos log1p (logaritmo de x+1) para manejar ceros sin errores
-                        ts_full_log = np.log1p(ts_full)
+                        # --- 2. División Train/Test (en ESCALA REAL) ---
+                            # ¡Creamos la división en escala real PRIMERO para los gráficos!
+                            split_point = int(len(ts_full) * 0.8)
+                            ts_train = ts_full.iloc[:split_point]  # <--- ¡ESTA ES LA VARIABLE QUE FALTABA!
+                            ts_test = ts_full.iloc[split_point:]   # <--- ¡Y ESTA!
 
-                        # --- 2. División Train/Test (Usando los datos LOG) ---
-                        split_point = int(len(ts_full_log) * 0.8)
-                        ts_train_log = ts_full_log.iloc[:split_point]
-                        ts_test_log = ts_full_log.iloc[split_point:]
-
-                        if len(ts_test_log) < 2 or len(ts_train_log) < 12:
-                            st.error(f"Error: No hay suficientes datos...")
-                            st.stop()
-                        else:
-                            # --- 3. Ejecución de Modelos ---
-                            st.write("Entrenando modelos con transformación Log-Normal...")
+                            # --- ¡TRANSFORMACIÓN LOGARÍTMICA AQUÍ! ---
+                            # Ahora transformamos TODO
+                            ts_full_log = np.log1p(ts_full)
                             
-                            # --- ¡AQUÍ VA LA LÍNEA QUE FALTA! ---
-                            # Asegúrate de que esta definición esté presente
+                            # --- División Train/Test (en ESCALA LOG) ---
+                            # Y volvemos a dividir los datos LOG para los modelos
+                            ts_train_log = ts_full_log.iloc[:split_point]
+                            ts_test_log = ts_full_log.iloc[split_point:]
+
+                            # C. Validación (usamos los splits reales para el conteo)
+                            if len(ts_test) < 2 or len(ts_train) < 12:
+                                st.error(f"Error: No hay suficientes datos para una división 80/20 válida (Train: {len(ts_train)}, Test: {len(ts_test)}).")
+                                st.stop()
+                            else:
+                                # --- 3. Ejecución de Modelos ---
+                                st.write("Entrenando modelos con transformación Log-Normal...")
+                            
                             model_pipeline = [
                                 ('SARIMA', model_arima),
                                 ('Prophet', model_prophet),
@@ -560,5 +565,6 @@ if df is not None:
                             st.caption("Valores más bajos son mejores.")
 else:
     st.info("Cargando datos... Si el error persiste, revisa el nombre/ruta del archivo.")
+
 
 
