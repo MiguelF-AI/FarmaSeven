@@ -11,7 +11,7 @@ warnings.filterwarnings('ignore')
 # --- Constantes ---
 RUTA_HISTORICO = 'data/datos_finales_listos_para_modelo.csv'
 RUTAS_PREDICCIONES = {
-    'ARIMA': 'data/predicciones_precalculadas_log_sarima_sin_decimales.csv',
+    'ARIMA': 'data/predicciones_precalculadas (ARIMA)_sin_decimales.csv',
     'Holt-Winters': 'data/predicciones_precalculadas_log_holt_winters_sin_decimales.csv',
     'Red Neuronal (LSTM)': 'data/predicciones_lstm_sin_decimales.csv'
 }
@@ -294,4 +294,5 @@ else:
             height=400,
             use_container_width=True
         )
+
 
